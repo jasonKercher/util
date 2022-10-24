@@ -3,53 +3,50 @@
 
 #ifdef __cplusplus
 extern "C" {
-#define restrict
 #endif
 
-#include <libgen.h>
 #include <stdlib.h>
-#include <errno.h>
-#include <stdio.h>
+#include <stdint.h>
 #include <limits.h>
-#include <string.h>
+#include <stdio.h>
 #include <ctype.h>
 
-#include "node.h"
+enum Result {
+	Result_Ok = 0,
+	Result_Done = -5,
+	Result_Fail = -1,
+};
+typedef enum Result Result;
 
 typedef void (*generic_data_fn)(void*);
 typedef int (*int_generic_data_fn)(void*);
 
-#define _quote_macro_(x) #x
-#define quote_macro_(x)  _quote_macro_(x)
+#define STR(S_)   QUOTE(S_)
+#define QUOTE(S_) #S_
+
+#define UNREACHABLE()                                  \
+	{                                              \
+		fprintf(stderr,                        \
+		    "\nHIT UNREACHABLE CODE ("__FILE__ \
+		    ": %u\n",                          \
+		    __LINE__);                         \
+		abort();                               \
+	}
 
 /**
  * malloc wrapper that does error checking
  */
-#define malloc_ malloc
+void* heap_alloc(long);
 
 /**
  * realloc wrapper that does error checking
  */
-#define realloc_ realloc
-
-/**
- * strncpy but guaranteed to end with '\0'
- */
-#define strncpy_(dest_, src_, n_)         \
-	{                                 \
-		dest_[0] = '\0';          \
-		strncat(dest_, src_, n_); \
-	}
+void* heap_resize(void*, long);
 
 /**
  * free pointer if not NULL and set to NULL
  */
-#define free_(ptr_)                \
-	{                          \
-		free((void*)ptr_); \
-		ptr_ = NULL;       \
-	}
-#define free_if_exists_(ptr_)              \
+#define HEAP_FREE(ptr_)                    \
 	{                                  \
 		if (ptr_ != NULL) {        \
 			free((void*)ptr_); \
@@ -60,59 +57,60 @@ typedef int (*int_generic_data_fn)(void*);
 /* Allow blank __VA_ARGS__ */
 #define optarg_(...) , ##__VA_ARGS__
 
-/* allocate space and pass args to ${T_}_construct */
-#define new_(T_, ...)                                        \
-	({                                                   \
-		T_* alloc_ = malloc_(sizeof(T_));            \
-		T_##_construct(alloc_ optarg_(__VA_ARGS__)); \
-		alloc_;                                      \
-	})
+/* Allocate by type */
+#define new(T_) heap_alloc(sizeof(T_));
 
-/* same as new_ except second arg is a type that
- * we take the sizeof. For example:
- *
- *     vec* v = new_t_(vec, int);
- *
- * is the same as
- *
- *     vec* v = new_(vec, sizeof(int));
- */
-#define new_t_(T_, data_T_, ...)                                              \
-	({                                                                    \
-		T_* alloc_ = malloc_(sizeof(T_));                             \
-		T_##_construct(alloc_, sizeof(data_T_) optarg_(__VA_ARGS__)); \
-		alloc_;                                                       \
-	})
-
-/* Will call ${T_}_destroy and free allocation */
-#define delete_if_exists_(T_, p_, ...)                         \
-	{                                                      \
-		if (p_ != NULL) {                              \
-			T_##_destroy(p_ optarg_(__VA_ARGS__)); \
-			free_(p_);                             \
-		}                                              \
+#define NOT_IMPLEMENTED()                                                          \
+	{                                                                          \
+		fprintf(stderr, "not implemented (%s: %d)\n", __FILE__, __LINE__); \
+		return Result_Fail;                                                \
 	}
-#define delete_(T_, p_, ...)                           \
-	{                                              \
-		T_##_destroy(p_ optarg_(__VA_ARGS__)); \
-		free_(p_);                             \
+
+#define OR_RETURN(TEST_)                    \
+	{                                   \
+		Result res_ = (TEST_);      \
+		if (res_ == Result_Fail) {  \
+			return Result_Fail; \
+		}                           \
 	}
 
 #define num_compare_(a, b) (((a) > (b)) - ((a) < (b)))
 
+char* strncpy_safe(char* dest, const char* src, size_t n);
+
+
 /**
- * this function is a wrapper for the standard strtol
- * function that also handles all errors internally.
+ * Safely convert 2 bytes to uint16_t
  */
-int str2long(long* restrict, const char* restrict s);
-int str2double(double* restrict, const char* restrict s);
+uint16_t bytes_to_u16(uint8_t b0_high, uint8_t b1_low);
+
+/**
+ * standard division, but round up instead
+ * of truncating off any fraction
+ */
+int div_round_up(int dividend, int divisor);
+
+/**
+ * string to unsigned long, long and double conversion.
+ * non-zero return is a failure. These functions print
+ * error messages to stderr.
+ */
+int str2ulongbase(unsigned long* ret, const char* s, int base);
+int str2ulong(unsigned long* ret, const char* s);
+int str2longbase(long*, const char* s, int base);
+int str2long(long*, const char* s);
+int str2double(double*, const char* s);
 
 /**
  * charcount simply counts the occurences of char c
  * in the string s.
  */
-int charcount(const char* restrict s, char c);
-int charncount(const char* restrict s, char c, unsigned n);
+int charcount(const char* s, char c);
+/**
+ * Same as charcount except for non-null terminated
+ * strings.
+ */
+int charncount(const char* s, char c, unsigned n);
 
 /**
  * strhaschar checks whether a char c exists within string s.
@@ -121,14 +119,14 @@ int charncount(const char* restrict s, char c, unsigned n);
  *      - 1 if yes
  *      - 0 if no
  */
-int strhaschar(const char* restrict s, char c);
+int strhaschar(const char* s, char c);
 
 /**
  * removecharat shifts all characters left 1 at the
  * provided index i in order to essentially remove that
  * character from the string.
  */
-void removecharat(char* restrict s, int i);
+void removecharat(char* s, int i);
 
 /**
  * randstr generates a random string of length n
@@ -137,45 +135,23 @@ void removecharat(char* restrict s, int i);
  * returns:
  *      - char* of random characters
  */
-char* randstr(char* restrict s, const int n);
+char* randstr(char* s, const int n);
 
 /**
  * getnoext assigns a filename with no extension
  */
-void getnoext(char* dest, const char* restrict filename);
-
-/**
- * getext returns the extension from a provided filename
- * the returned char* will be allocated on the heap
- * and must be free'd!
- */
-char* getext(char* filename);
-
-/**
- * string_eq returns true if two strings are equal
- */
-int string_eq(const char* s1, const char* restrict s2);
-
-/**
- * istring_eq returns true if two strings are equal
- * while ignoring case.  it basically just inverts
- * the return of strcasecmp.
- */
-int istring_eq(const char* restrict s1, const char* restrict s2);
+void getnoext(char* dest, const char* filename);
 
 /**
  * lower case a char* in place
- * NOTE:
- * null terminator is assumed. don't be stupid.
+ * NOTE: NULL terminator is assumed.
  */
-void string_to_lower(char* restrict s);
+void string_to_lower(char* s);
 
 /**
  * copy BSD's strnstr
  */
-char* strnstr(const char* restrict s, const char* restrict find, size_t slen);
-
-struct node* dir_list_files(const char* restrict dir);
+char* strnstr(const char* s, const char* find, size_t slen);
 
 #ifdef __cplusplus
 }

@@ -1,101 +1,115 @@
 #ifndef STRINGY_H
 #define STRINGY_H
 
-#include <stdarg.h>
+#include "slice.h"
 #include "vec.h"
 
 /**
- * string is a vector of char with one exception:
+ * String is a vector of char with one exception:
  * in vec, there is always a trailing element
  * that is denoted as "end". that can contain
  * anything and should not be used. this is the
- * one difference here.  string will also have
+ * one difference here.  String will also have
  * this trailing element, but it will *always*
  * be a NULL terminator.
  */
 
-struct stringview;
+typedef Vec(char) String;
 
-typedef vec string;
+/* create/destroy */
+String string_make();
+String string_from_string(const String);
+String string_from_char_ptr(const char*);
+String string_from_slice(Const_Char_Slice);
+String string_take(char*);
+#define string_destroy vec_destroy
 
-/* constructors */
-string* string_construct(string* restrict);
-string* string_from_string(const string* restrict);
-string* string_construct_from_string(string* restrict, const string* restrict);
-string* string_from_char_ptr(const char* restrict);
-string* string_construct_from_char_ptr(string* restrict, const char* restrict);
-string* string_from_stringview(const struct stringview* restrict);
-string* string_construct_from_stringview(string* restrict,
-                                         const struct stringview* restrict);
-string* string_take(char* restrict);
-string* string_construct_take(string* restrict, char* restrict);
+/* access */
+#define string_empty   vec_empty
+#define string_at      vec_at
 
-/* equal to vec */
-#define string_destroy(s_)         vec_destroy(s_)
-#define string_get(s_)             vec_begin(s_)
-#define string_empty(s_)           vec_empty(s_)
-#define string_append(src_, dest_) vec_extend(src_, dest_)
+/* iterators */
+#define string_begin   vec_begin
+#define string_back    vec_back
+#define string_end     vec_end
+#define string_iter_at vec_iter_at
 
-/* stringview interface */
-void string_copy_from_stringview(string* restrict s, const struct stringview* restrict);
-void string_append_stringview(string* restrict, const struct stringview* restrict);
-struct stringview string_get_stringview(const string* restrict);
+/* insertion */
+void string_insert(String*, char* pos, const char* it, int n);
+void string_insert_at(String*, int idx, const char* it, int n);
+void string_insert_one(String*, char* pos, char);
+void string_insert_one_at(String*, int idx, char);
+
+/* deletion */
+void string_erase(String*, char* pos, int n);
+void string_erase_at(String*, int idx, int n);
+void string_erase_one(String*, char* pos);
+void string_erase_one_at(String*, int idx);
+
+/* append */
+void string_append(String*, const char* it, int n);
+void string_extend(String*, String);
+
+/* slice interface */
+void string_copy_from_slice(String* s, Const_Char_Slice);
+void string_append_slice(String*, Const_Char_Slice);
+Char_Slice string_get_slice(String);
 
 /* char interface */
-void string_push_back(string* restrict, char);
-size_t string_strcat(string* restrict, const char* restrict);
-size_t string_strncat(string* restrict, const char* restrict, size_t);
-size_t string_strcpy(string* restrict, const char* restrict);
-size_t string_strncpy(string* restrict, const char* restrict, size_t);
-size_t string_sprintf(string* restrict s, const char* restrict fmt, ...);
-const char* string_c_str(const string* restrict s);
+void string_push_back(String*, char);
+int string_strcat(String*, const char*);
+int string_strncat(String*, const char*, int);
+int string_strcpy(String*, const char*);
+int string_strncpy(String*, const char*, int);
+int string_sprintf(String* s, const char* fmt, ...);
+int string_vsprintf(String* s, const char* fmt, va_list);
+const char* string_c_str(String);
 
-/* string iterface */
-char* string_export(string* restrict);
-void string_clear(string* restrict);
-void string_resize(string* restrict, size_t);
-void string_copy(string* restrict dest, const string* restrict src);
+/* String iterface */
+char* string_export(String*);
+void string_clear(String*);
+void string_resize(String*, int);
+void string_copy(String* dest, String src);
 
 
 /* Find and replace */
-
-const char* string_find_replace_one(string* restrict,
+const char* string_find_replace_one(String* restrict,
                                     const char* restrict from,
                                     const char* restrict to,
-                                    size_t);
+                                    int);
 
-void string_find_replace(string* restrict,
+void string_find_replace(String* restrict,
                          const char* restrict from,
                          const char* restrict to);
 
-const char* string_find_replace_one_nocase(string* restrict,
+const char* string_find_replace_one_nocase(String* restrict,
                                            const char* restrict from,
                                            const char* restrict to,
-                                           size_t);
+                                           int);
 
-void string_find_replace_nocase(string* restrict,
+void string_find_replace_nocase(String* restrict,
                                 const char* restrict from,
                                 const char* restrict to);
 
 /* These are "one less allocation" options for possibly non-null terminated strings */
-const char* string_find_replace_one_limited(string* restrict,
+const char* string_find_replace_one_limited(String* restrict,
                                             const char* restrict from,
                                             const char* restrict to,
-                                            size_t,
+                                            int,
                                             unsigned);
 
-void string_find_replace_limited(string* restrict,
+void string_find_replace_limited(String* restrict,
                                  const char* restrict from,
                                  const char* restrict to,
                                  unsigned);
 
-const char* string_find_replace_one_nocase_limited(string* restrict,
+const char* string_find_replace_one_nocase_limited(String* restrict,
                                                    const char* restrict from,
                                                    const char* restrict to,
-                                                   size_t,
+                                                   int,
                                                    unsigned);
 
-void string_find_replace_nocase_limited(string*,
+void string_find_replace_nocase_limited(String*,
                                         const char* restrict from,
                                         const char* restrict to,
                                         unsigned);

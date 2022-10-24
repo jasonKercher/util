@@ -1,0 +1,22 @@
+[
+  {
+    "arguments": [
+      "/usr/bin/x86_64-linux-gnu-gcc-10",
+      "-D",
+      "DEBUG",
+      "-Wall",
+      "-Wextra",
+      "-g",
+      "-O0",
+      "-std=gnu11",
+      "-Wa,-alh=objects/./dgraph.lst",
+      "-o",
+      "objects/./dgraph.o",
+      "-c",
+      "dgraph.c"
+    ],
+    "directory": "/home/jason/dev/shnt/util",
+    "file": "/home/jason/dev/shnt/util/dgraph.c",
+    "output": "/home/jason/dev/shnt/util/objects/./dgraph.o"
+  }
+]

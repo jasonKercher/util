@@ -1,323 +1,216 @@
 #include "vec.h"
 
-#include <stdint.h>
+/* The functions in here should usually never be called directly */
+
+#include <string.h>
+#include <stdio.h>
 #include "util.h"
 
-#define VEC_ALLOC_DEFAULT 2
+#define vec_get_idx_(v_, pos_, elem_size_) \
+	_iter_size_(vec_begin(*v_), (uint8_t*)pos_, elem_size_) - 1
 
-vec* vec_construct(vec* restrict self, size_t elem_size)
-{
-	*self = (vec) {
-	        ._alloc = VEC_ALLOC_DEFAULT,
-	        ._elem_size = elem_size,
-	};
+#define _iter_size_(begin_, back_, elem_size_) \
+	(((uint8_t*)back_ - (uint8_t*)begin_) / elem_size_) + 1
 
-	self->data = malloc_(VEC_ALLOC_DEFAULT * self->_elem_size);
-
-	return self;
+/** Create **/
+void* vec_construct_(void* gen_v, int elem_size) {
+	Vec* v = gen_v;
+	*v     = (Vec) {
+            ._alloc = VEC_ALLOC_DEFAULT,
+            .data   = heap_alloc(VEC_ALLOC_DEFAULT * elem_size),
+        };
+	return v;
 }
 
-void vec_destroy(vec* restrict self)
-{
-	free_(self->data);
+void vec_clone_(void* gen_dest, void* gen_src, int elem_size) {
+	vec_construct_(gen_dest, elem_size);
+	vec_extend_(gen_dest, gen_src, elem_size);
 }
 
-bool vec_empty(const vec* restrict self)
-{
-	return self->size == 0;
+void vec_copy_(void* gen_dest, void* gen_src, int elem_size) {
+	Vec* v = gen_dest;
+	v->size = 0;
+	vec_extend_(gen_dest, gen_src, elem_size);
 }
 
-void* vec_at(const vec* restrict self, size_t index)
-{
-	return (char*)self->data + self->_elem_size * index;
+/** Iterators **/
+void* vec_iter_at_(const void* gen_v, int index, int elem_size) {
+	const Vec* v = gen_v;
+	return v->data + elem_size * index;
 }
 
-void* vec_begin(const vec* restrict self)
-{
-	return self->data;
-}
-
-void* vec_back(const vec* restrict self)
-{
-	if (self->size == 0) {
-		return self->data;
+void* vec_back_(const void* gen_v, int elem_size) {
+	const Vec* v = gen_v;
+	if (v->size == 0) {
+		return v->data;
 	}
-	return vec_at(self, self->size - 1);
+	return vec_iter_at_(v, v->size - 1, elem_size);
 }
 
-void* vec_end(const vec* restrict self)
-{
-	return vec_at(self, self->size);
+void* vec_end_(const void* gen_v, int elem_size) {
+	const Vec* v = gen_v;
+	return vec_iter_at_(v, v->size, elem_size);
 }
 
-/** allocate alloc + 1 for iterator end **/
-void vec_reserve(vec* restrict self, size_t alloc)
-{
-	if (self->_alloc >= ++alloc) {
+/** Resizing **/
+void vec_reserve_(void* gen_v, int alloc, int elem_size) {
+	Vec* v = gen_v;
+	if (v->_alloc >= alloc + 1) {
 		return;
 	}
-	void* new_dest_ = realloc(self->data, alloc * self->_elem_size);
-	if (!new_dest_) {
+	void* data = realloc(v->data, (alloc + 1) * elem_size);
+	if (!data) {
 		perror("realloc");
 		exit(EXIT_FAILURE);
 	}
-	self->data = new_dest_;
-	new_dest_ = NULL;
-	self->_alloc = alloc;
+	v->data   = data;
+	v->_alloc = alloc + 1;
 }
 
-void vec_resize(vec* restrict self, size_t size)
-{
-	if (size == self->size) {
-		return;
+void vec_resize_(void* gen_v, int n, int elem_size) {
+	Vec* v = gen_v;
+	vec_reserve_(v, n, elem_size);
+	v->size = n;
+}
+
+void vec_resize_and_zero_(void* gen_v, int size, int elem_size) {
+	Vec* v         = gen_v;
+	int  org_size  = v->size;
+	int  org_alloc = v->_alloc;
+	vec_reserve_(v, size, elem_size);
+	v->size = size;
+	if (org_alloc != v->_alloc) {
+		int zero_size = v->_alloc - org_size;
+		memset(&v->data[org_size], 0, zero_size * elem_size);
 	}
+}
 
-	if (size > self->size) {
-		vec_reserve(self, size);
+/** Growing **/
+void* vec_add_one_(void* gen_v, int elem_size) {
+	Vec* v = gen_v;
+	if (v->_alloc <= ++v->size) {
+		vec_reserve_(v, v->_alloc * 2, elem_size);
 	}
-
-	self->size = size;
+	return v->data + elem_size * (v->size - 1);
 }
 
-void vec_resize_and_zero(vec* restrict self, size_t size)
-{
-	size_t org_size = self->size;
-	size_t org_alloc = self->_alloc;
-	vec_resize(self, size);
-	if (org_alloc == self->_alloc) {
-		return;
-	}
-	void* new_shit = vec_at(self, org_size);
-	size_t new_shit_size = self->_alloc - org_size;
-	memset(new_shit, 0, new_shit_size * self->_elem_size);
+void* vec_add_one_front_(void* gen_v, int elem_size) {
+	Vec* v          = gen_v;
+	int  move_size_ = elem_size * (v->_alloc - 1);
+	vec_add_one_(v, elem_size);
+	memmove(v->data + elem_size, v->data, move_size_);
+	return v->data;
 }
 
-void vec_clear(vec* restrict self)
-{
-	vec_resize(self, 0);
+void vec_push_back_(void* gen_v, const void* item, int elem_size) {
+	Vec* v = gen_v;
+	memcpy(vec_add_one_(v, elem_size), item, elem_size);
 }
 
-void vec_shrink_to_fit(vec* restrict self)
-{
-	realloc_(self->data, (self->size + 1) * self->_elem_size);
-	self->_alloc = self->size + 1;
+/** Assignment **/
+void vec_set_at_(void* gen_v, int idx, const void* src, int n, int elem_size) {
+	Vec*  v    = gen_v;
+	void* dest = vec_iter_at_(v, idx, elem_size);
+	memcpy(dest, src, elem_size * n);
 }
 
-void* vec_pop_back(vec* restrict self)
-{
-	if (self->size == 0) {
-		return NULL;
-	}
+/** Insertion **/
+void vec_insert_iter_(
+    void* gen_v, void* pos, const void* begin, const void* back, int elem_size) {
+	Vec* v          = gen_v;
+	int  idx        = vec_get_idx_(v, pos, elem_size);
+	int  iter_size  = _iter_size_(begin, back, elem_size);
+	int  iter_bytes = elem_size * iter_size;
 
-	--self->size;
-	return vec_end(self);
-}
+	vec_resize_(v, v->size + iter_size, elem_size);
+	int move_bytes = elem_size * (v->_alloc - idx - iter_size);
 
-void* vec_add_one(vec* restrict self)
-{
-	if (self->_alloc <= ++self->size) {
-		vec_reserve(self, self->_alloc * 2);
-	}
+	pos = vec_iter_at_(v, idx, elem_size);
 
-	return vec_back(self);
-}
-
-void* vec_add_one_front(vec* restrict self)
-{
-	size_t move_bytes = self->_elem_size * (self->_alloc - 1);
-	vec_add_one(self);
-
-	memmove((char*)self->data + self->_elem_size, self->data, move_bytes);
-	return vec_begin(self);
-}
-
-void vec_set_iter(vec* restrict _unused, void* pos, const void* begin, const void* back)
-{
-	memcpy(pos, begin, (char*)back - (char*)begin + 1);
-}
-
-void vec_set_one(vec* restrict self, void* pos, const void* restrict src)
-{
-	memcpy(pos, src, self->_elem_size);
-}
-
-void vec_set_at(vec* restrict self, size_t n, const void* restrict src, size_t len)
-{
-	void* restrict dest = vec_at(self, n);
-	memcpy(dest, src, self->_elem_size * len);
-}
-
-void vec_set(vec* restrict self, void* pos, const void* restrict src, size_t len)
-{
-	memcpy(pos, src, self->_elem_size * len);
-}
-
-void vec_push_back(vec* restrict self, const void* restrict item)
-{
-	memcpy(vec_add_one(self), item, self->_elem_size);
-}
-
-void vec_insert_iter(vec* restrict self, void* pos, const void* begin, const void* back)
-{
-	size_t idx = vec_get_idx_(self, pos);
-	size_t iter_size = vec_iter_size_(self, begin, back);
-	size_t iter_bytes = self->_elem_size * iter_size;
-
-	vec_resize(self, self->size + iter_size);
-	size_t move_bytes = self->_elem_size * (self->_alloc - idx - iter_size);
-
-	pos = vec_at(self, idx);
-
-	memmove((char*)pos + iter_bytes, pos, move_bytes);
+	memmove((uint8_t*)pos + iter_bytes, pos, move_bytes);
 	memcpy(pos, begin, iter_bytes);
 }
 
-void vec_insert_one(vec* restrict self, void* pos, const void* restrict data)
-{
-	vec_add_one(self);
-	size_t move_bytes =
-	        self->_elem_size * ((self->_alloc - 1) - vec_get_idx_(self, pos));
+void vec_insert_one_(void* gen_v, void* pos, const void* item, int elem_size) {
+	Vec* v = gen_v;
+	vec_add_one(v);
+	int move_bytes = elem_size * ((v->_alloc - 1) - vec_get_idx_(v, pos, elem_size));
 
-	memmove((char*)pos + self->_elem_size, pos, move_bytes);
-	memcpy(pos, data, self->_elem_size);
+	memmove((uint8_t*)pos + elem_size, pos, move_bytes);
+	memcpy(pos, item, elem_size);
 }
 
-void vec_insert_at(vec* restrict self, size_t idx, const void* begin, size_t len)
-{
-	void* pos = vec_at(self, idx);
-	const void* back = (const char*)begin + ((len - 1) * self->_elem_size);
-	vec_insert_iter(self, pos, begin, back);
+void vec_insert_one_at_(void* gen_v, int idx, const void* item, int elem_size) {
+	Vec* v = gen_v;
+	vec_add_one(v);
+	int   move_bytes = elem_size * ((v->_alloc - 1) - idx);
+	void* pos        = vec_iter_at_(v, idx, elem_size);
+
+	memmove((uint8_t*)pos + elem_size, pos, move_bytes);
+	memcpy(pos, item, elem_size);
 }
 
-void vec_insert(vec* restrict self, void* pos, const void* begin, size_t len)
-{
-	if (len == 0) {
+void vec_insert_at_(void* gen_v, int idx, const void* it, int n, int elem_size) {
+	Vec*        v    = gen_v;
+	void*       pos  = vec_iter_at_(v, idx, elem_size);
+	const void* back = (const uint8_t*)it + ((n - 1) * elem_size);
+	vec_insert_iter_(v, pos, it, back, elem_size);
+}
+
+void vec_insert_(void* gen_v, void* pos, const void* it, int n, int elem_size) {
+	if (n == 0) {
 		return;
 	}
-	const void* back = begin + self->_elem_size * (len - 1);
-	vec_insert_iter(self, pos, begin, back);
+	Vec*        v    = gen_v;
+	const void* back = (const uint8_t*)it + elem_size * (n - 1);
+	vec_insert_iter_(v, pos, it, back, elem_size);
 }
 
-void vec_erase_iter(vec* restrict self, void* begin, const void* back)
-{
-	size_t bytes = (const char*)vec_at(self, self->_alloc - 1) - (const char*)back;
-	self->size -= vec_iter_size_(self, begin, back);
-	memmove(begin, (char*)back + self->_elem_size, bytes);
+/** Deletion **/
+void vec_erase_iter_(void* gen_v, void* begin, const void* back, int elem_size) {
+	Vec* v     = gen_v;
+	int  bytes = (const uint8_t*)vec_iter_at_(v, v->_alloc - 1, elem_size)
+	            - (const uint8_t*)back;
+	v->size -= _iter_size_(begin, back, elem_size);
+	memmove(begin, (uint8_t*)back + elem_size, bytes);
 }
 
-void vec_erase_one(vec* restrict self, void* elem)
-{
-	vec_erase_iter(self, elem, elem);
+void vec_erase_at_(void* gen_v, int idx, int n, int elem_size) {
+	void*       begin = vec_iter_at_(gen_v, idx, elem_size);
+	const void* back  = vec_iter_at_(gen_v, idx + n - 1, elem_size);
+	vec_erase_iter_(gen_v, begin, back, elem_size);
 }
 
-void vec_erase_at(vec* restrict self, size_t index, size_t len)
-{
-	void* begin = vec_at(self, index);
-	const void* back = vec_at(self, index + len - 1);
-	vec_erase_iter(self, begin, back);
-}
-
-void vec_erase(vec* restrict self, void* begin, size_t len)
-{
-	if (len == 0) {
+void vec_erase_(void* gen_v, void* it, int n, int elem_size) {
+	if (n == 0) {
 		return;
 	}
-	const void* back = begin + self->_elem_size * (len - 1);
-	vec_erase_iter(self, begin, back);
+	const void* back = (char*)it + elem_size * (n - 1);
+	vec_erase_iter_(gen_v, it, back, elem_size);
 }
 
-void vec_append(vec* restrict self, const void* restrict src, size_t n)
-{
-	size_t old_size = self->size;
-	vec_resize(self, self->size + n);
-	void* end = vec_at(self, old_size);
-	memcpy(end, src, n * self->_elem_size);
+/** Appending **/
+void vec_append_(void* gen_v, const void* it, int n, int elem_size) {
+	Vec* v        = gen_v;
+	int  old_size = v->size;
+	vec_resize(v, v->size + n);
+	void* end = vec_iter_at_(v, old_size, elem_size);
+	memcpy(end, it, n * elem_size);
 }
 
-void vec_extend(vec* restrict dest, const vec* restrict src)
-{
-	int index = dest->size;
-	vec_resize(dest, dest->size + src->size);
-	void* end = vec_at(dest, index);
-	size_t bytes = src->_elem_size * (src->size + 1);
-	memmove(end, vec_begin(src), bytes);
+void vec_extend_(void* gen_v, const void* vec_src, int elem_size) {
+	Vec*       v     = gen_v;
+	const Vec* src   = vec_src;
+	int        index = v->size;
+	vec_resize(v, v->size + src->size);
+	void*  end   = vec_iter_at_(v, index, elem_size);
+	size_t bytes = elem_size * (src->size + 1);
+	memmove(end, vec_begin(*src), bytes);
 }
 
-void vec_sort_r(vec* restrict self, qsort_r_cmp_fn cmp__, void* context)
-{
-	qsort_r(self->data, self->size, self->_elem_size, cmp__, context);
+#ifdef __unix__
+void vec_sort_r_(void* gen_v, qsort_r_cmp_fn cmp__, void* context, int elem_size) {
+	Vec* v = gen_v;
+	qsort_r(v->data, v->size, elem_size, cmp__, context);
 }
-
-
-bitvec* bitvec_construct(bitvec* restrict self)
-{
-	vec_construct_(self, uint32_t);
-	memset(self->data, 0, self->_elem_size * self->_alloc);
-	return self;
-}
-
-void bitvec_destroy(bitvec* restrict self)
-{
-	vec_destroy(self);
-}
-
-bool bitvec_at(const bitvec* restrict self, size_t idx)
-{
-	uint32_t* num = vec_at(self, idx / 32);
-	uint8_t offset = idx % 32;
-	return (*num >> offset) & 1;
-}
-
-void bitvec_set(bitvec* restrict self, size_t idx, bool newval)
-{
-	uint32_t* num = vec_at(self, idx / 32);
-	uint32_t offset = idx % 32;
-	if (newval) {
-		*num |= (1 << offset);
-	} else {
-		*num &= ~(1 << offset);
-	}
-}
-
-void bitvec_reserve(bitvec* restrict self, size_t size)
-{
-	size_t alloc = size / 32 + 1;
-	if (self->_alloc >= ++alloc) {
-		return;
-	}
-	void* new_dest_ = realloc(self->data, alloc * self->_elem_size);
-	if (!new_dest_) {
-		perror("realloc");
-		exit(EXIT_FAILURE);
-	}
-	self->data = new_dest_;
-	new_dest_ = NULL;
-	self->_alloc = alloc;
-}
-
-void bitvec_resize(bitvec* restrict self, size_t size)
-{
-	size_t org_size = self->size / 32 + 1;
-	size_t org_alloc = self->_alloc;
-
-	if (size > self->size) {
-		bitvec_reserve(self, size);
-	}
-	self->size = size;
-
-	if (org_alloc == self->_alloc) {
-		return;
-	}
-	void* new_shit = vec_at(self, org_size);
-	size_t new_shit_size = self->_alloc - org_size;
-	memset(new_shit, 0, new_shit_size * self->_elem_size);
-}
-
-void bitvec_push_back(bitvec* restrict self, bool val)
-{
-	if (++self->size > (self->_alloc - 1) * 32) {
-		bitvec_reserve(self, self->size * 2);
-	}
-
-	bitvec_set(self, self->size - 1, val);
-}
+#endif /* unix */
