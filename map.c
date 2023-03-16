@@ -25,7 +25,8 @@ uint64_t _hash_rtrim(uint8_t* keybuf, const char* restrict key, unsigned* n);
 uint64_t _hash_nocase_rtrim(uint8_t* keybuf, const char* restrict key, unsigned* n);
 
 
-void set_construct(Set* restrict s, size_t start_size, const unsigned props) {
+void
+set_construct(Set* restrict s, size_t start_size, const unsigned props) {
 	start_size = _next_power_of_2(start_size);
 	*s         = (Set) {
             ._entries = slice_new(_Entry, start_size),
@@ -49,20 +50,28 @@ void set_construct(Set* restrict s, size_t start_size, const unsigned props) {
 	memset(s->_entries.data, -1, sizeof(_Entry) * start_size);
 }
 
-void set_destroy(Set* restrict s) {
-	HEAP_FREE(s->_entries.data);
-	HEAP_FREE(s->_keybuf.data);
+void
+set_destroy(Set* restrict s) {
+	heap_free(s->_entries.data);
+	heap_free(s->_keybuf.data);
 }
 
-void set_clear(Set* restrict s) {
+void
+set_clear(Set* restrict s) {
 	s->_keybuf_head = 0;
 	memset(s->_entries.data, -1, sizeof(_Entry) * s->_entries.len);
 }
 
-void set_nadd(Set* restrict s, const char* restrict key, unsigned n) {
+void
+set_nadd(Set* restrict s, const char* restrict key, unsigned n) {
 	uint64_t hash = 0;
-	_Entry*  e =
-	    _get_entry(&s->_entries, &s->_keybuf, s->hash__, s->_keybuf_head, key, &n, &hash);
+	_Entry*  e    = _get_entry(&s->_entries,
+            &s->_keybuf,
+            s->hash__,
+            s->_keybuf_head,
+            key,
+            &n,
+            &hash);
 
 	if (e->val_idx != _NONE) {
 		return;
@@ -79,14 +88,21 @@ void set_nadd(Set* restrict s, const char* restrict key, unsigned n) {
 	}
 }
 
-bool set_nhas(Set* restrict s, const char* restrict key, unsigned n) {
-	uint64_t hash = 0;
-	_Entry*  entry =
-	    _get_entry(&s->_entries, &s->_keybuf, s->hash__, s->_keybuf_head, key, &n, &hash);
+bool
+set_nhas(Set* restrict s, const char* restrict key, unsigned n) {
+	uint64_t hash  = 0;
+	_Entry*  entry = _get_entry(&s->_entries,
+            &s->_keybuf,
+            s->hash__,
+            s->_keybuf_head,
+            key,
+            &n,
+            &hash);
 	return (entry->val_idx != _NONE);
 }
 
-void map_construct_(
+void
+map_construct_(
     void* gen_m, const unsigned elem_size, size_t start_size, const unsigned props) {
 	Map* m     = gen_m;
 	start_size = _next_power_of_2(start_size);
@@ -114,25 +130,33 @@ void map_construct_(
 	vec_reserve_(&m->values, start_size / 2, elem_size);
 }
 
-void map_destroy(void* gen_m) {
+void
+map_destroy(void* gen_m) {
 	Map* m = gen_m;
-	HEAP_FREE(m->_entries.data);
-	HEAP_FREE(m->_keybuf.data);
+	heap_free(m->_entries.data);
+	heap_free(m->_keybuf.data);
 	vec_destroy(&m->values);
 }
 
-void map_clear(void* gen_m) {
+void
+map_clear(void* gen_m) {
 	Map* m = gen_m;
 	vec_clear(&m->values);
 	m->_keybuf_head = 0;
 	memset(m->_entries.data, -1, sizeof(_Entry) * m->_entries.len);
 }
 
-uint32_t _map_declare(void* gen_m, const char* restrict key, unsigned n) {
-	Map* m = gen_m;
+uint32_t
+_map_declare(void* gen_m, const char* restrict key, unsigned n) {
+	Map*     m    = gen_m;
 	uint64_t hash = 0;
-	_Entry*  e =
-	    _get_entry(&m->_entries, &m->_keybuf, m->hash__, m->_keybuf_head, key, &n, &hash);
+	_Entry*  e    = _get_entry(&m->_entries,
+            &m->_keybuf,
+            m->hash__,
+            m->_keybuf_head,
+            key,
+            &n,
+            &hash);
 
 	if (e->val_idx != _NONE) {
 		return e->val_idx;
@@ -141,17 +165,19 @@ uint32_t _map_declare(void* gen_m, const char* restrict key, unsigned n) {
 	/* new value at this point */
 	e->key_idx = m->_keybuf_head;
 	e->key_len = n;
-	e->val_idx = m->values.size;
+	e->val_idx = m->values.len;
 	e->hash    = hash;
 	m->_keybuf_head += n;
-	if (m->values.size > _FULL_PERCENT * m->_entries.len) {
+	if (m->values.len > _FULL_PERCENT * m->_entries.len) {
 		_map_grow_entries(&m->_entries);
 	}
 	return _NONE;
 }
 
-uint32_t map_nset_(void* gen_m, const char* restrict key, unsigned n, const void* data, int elem_size) {
-	Map* m = gen_m;
+uint32_t
+map_nset_(
+    void* gen_m, const char* restrict key, unsigned n, const void* data, int elem_size) {
+	Map*     m   = gen_m;
 	uint32_t idx = _map_declare(m, key, n);
 	if (idx == _NONE) {
 		vec_push_back_(&m->values, data, elem_size);
@@ -161,12 +187,18 @@ uint32_t map_nset_(void* gen_m, const char* restrict key, unsigned n, const void
 	return idx;
 }
 
-void* map_nget_(void* gen_m, const char* restrict key, unsigned n, unsigned elem_size) {
+void*
+map_nget_(void* gen_m, const char* restrict key, unsigned n, unsigned elem_size) {
 	Map* m = gen_m;
 
 	uint64_t hash = 0;
-	_Entry*  e =
-	    _get_entry(&m->_entries, &m->_keybuf, m->hash__, m->_keybuf_head, key, &n, &hash);
+	_Entry*  e    = _get_entry(&m->_entries,
+            &m->_keybuf,
+            m->hash__,
+            m->_keybuf_head,
+            key,
+            &n,
+            &hash);
 
 	if (e->val_idx == _NONE) { /* new value */
 		return NULL;
@@ -176,7 +208,8 @@ void* map_nget_(void* gen_m, const char* restrict key, unsigned n, unsigned elem
 }
 
 
-void _map_grow_entries(_Entry_Slice* old_entries) {
+void
+_map_grow_entries(_Entry_Slice* old_entries) {
 	size_t old_start_size = old_entries->len;
 	size_t new_start_size = _next_power_of_2(old_start_size + 1);
 
@@ -189,7 +222,7 @@ void _map_grow_entries(_Entry_Slice* old_entries) {
 			continue;
 		}
 
-		size_t         idx = (size_t)(old_entries->data[i].hash & (new_start_size - 1));
+		size_t idx = (size_t)(old_entries->data[i].hash & (new_start_size - 1));
 		struct _Entry* dest_entry = &new_entries.data[idx];
 
 		while (dest_entry->val_idx != _NONE) {
@@ -199,11 +232,12 @@ void _map_grow_entries(_Entry_Slice* old_entries) {
 		*dest_entry = old_entries->data[i];
 	}
 
-	HEAP_FREE(old_entries->data);
+	heap_free(old_entries->data);
 	*old_entries = new_entries;
 }
 
-uint64_t _hash(uint8_t* keybuf, const char* restrict key, unsigned* n) {
+uint64_t
+_hash(uint8_t* keybuf, const char* restrict key, unsigned* n) {
 	uint64_t hash = _FNV1_INIT;
 	unsigned i    = 0;
 
@@ -216,7 +250,8 @@ uint64_t _hash(uint8_t* keybuf, const char* restrict key, unsigned* n) {
 	return hash;
 }
 
-uint64_t _hash_nocase(uint8_t* keybuf, const char* restrict key, unsigned* n) {
+uint64_t
+_hash_nocase(uint8_t* keybuf, const char* restrict key, unsigned* n) {
 	uint64_t hash = _FNV1_INIT;
 	unsigned i    = 0;
 
@@ -229,7 +264,8 @@ uint64_t _hash_nocase(uint8_t* keybuf, const char* restrict key, unsigned* n) {
 	return hash;
 }
 
-uint64_t _hash_rtrim(uint8_t* keybuf, const char* restrict key, unsigned* n) {
+uint64_t
+_hash_rtrim(uint8_t* keybuf, const char* restrict key, unsigned* n) {
 	unsigned last_not_space_n    = *n;
 	uint64_t hash                = _FNV1_INIT;
 	uint64_t last_not_space_hash = hash;
@@ -249,7 +285,8 @@ uint64_t _hash_rtrim(uint8_t* keybuf, const char* restrict key, unsigned* n) {
 	return last_not_space_hash;
 }
 
-uint64_t _hash_nocase_rtrim(uint8_t* keybuf, const char* restrict key, unsigned* n) {
+uint64_t
+_hash_nocase_rtrim(uint8_t* keybuf, const char* restrict key, unsigned* n) {
 	unsigned last_not_space_n    = *n;
 	uint64_t hash                = _FNV1_INIT;
 	uint64_t last_not_space_hash = hash;
@@ -270,13 +307,14 @@ uint64_t _hash_nocase_rtrim(uint8_t* keybuf, const char* restrict key, unsigned*
 }
 
 
-_Entry* _get_entry(_Entry_Slice* entries,
-    Byte_Slice*                  keybuf,
-    hash_fn                      hash__,
-    size_t                       keybuf_head,
-    const char*                  key,
-    unsigned*                    key_len,
-    uint64_t*                    hash) {
+_Entry*
+_get_entry(_Entry_Slice* entries,
+    Byte_Slice*          keybuf,
+    hash_fn              hash__,
+    size_t               keybuf_head,
+    const char*          key,
+    unsigned*            key_len,
+    uint64_t*            hash) {
 	while (keybuf_head + *key_len > (size_t)keybuf->len) {
 		keybuf->len *= 2;
 		keybuf->data = heap_resize(keybuf->data, keybuf->len);
@@ -289,7 +327,9 @@ _Entry* _get_entry(_Entry_Slice* entries,
 	_Entry* entry = &entries->data[idx];
 	while (entry->val_idx != _NONE
 	       && (entry->key_len != *key_len || entry->hash != *hash
-	           || memcmp(&keybuf->data[entry->key_idx], &keybuf->data[keybuf_head], *key_len)
+	           || memcmp(&keybuf->data[entry->key_idx],
+	                  &keybuf->data[keybuf_head],
+	                  *key_len)
 	                  != 0)) {
 		idx   = (idx + 1) % entries->len;
 		entry = &entries->data[idx];
@@ -298,7 +338,8 @@ _Entry* _get_entry(_Entry_Slice* entries,
 	return entry;
 }
 
-unsigned long _next_power_of_2(unsigned long n) {
+unsigned long
+_next_power_of_2(unsigned long n) {
 	unsigned long value = 1;
 	while (value < n) {
 		value = value << 1;

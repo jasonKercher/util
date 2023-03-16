@@ -11,15 +11,17 @@ extern "C" {
 #include <stdio.h>
 #include <ctype.h>
 
-enum Result {
-	Result_Ok = 0,
-	Result_Done = -5,
-	Result_Fail = -1,
-};
-typedef enum Result Result;
+#define PACKED __attribute__((__packed__))
 
-typedef void (*generic_data_fn)(void*);
-typedef int (*int_generic_data_fn)(void*);
+#if   UINTPTR_MAX == 0xFF
+#define POINTER_SIZE 1
+#elif UINTPTR_MAX == 0xFFFF
+#define POINTER_SIZE 2
+#elif UINTPTR_MAX == 0xFFFFFFFF
+#define POINTER_SIZE 4
+#elif UINTPTR_MAX == 0xFFFFFFFFFFFFFFFF
+#define POINTER_SIZE 8
+#endif
 
 #define STR(S_)   QUOTE(S_)
 #define QUOTE(S_) #S_
@@ -33,6 +35,31 @@ typedef int (*int_generic_data_fn)(void*);
 		abort();                               \
 	}
 
+#define hz_to_usec(HZ_)  ( 1000000 / (HZ_) )
+
+#define NUM_COMPARE(a, b)             (((a) > (b)) - ((a) < (b)))
+#define GET_MIN(A, B)                 ((A) < (B) ? (A) : (B))
+#define GET_MAX(A, B)                 ((A) > (B) ? (A) : (B))
+#define GET_MIN3(A, B, C)             MIN(MIN(A, B), C)
+#define GET_MAX3(A, B, C)             MAX(MAX(A, B), C)
+#define GET_CLAMP(X_, LOWER_, UPPER_) MIN(MAX((X_), (LOWER_)), (UPPER_))
+
+/**
+ * NOTE: Don't use if you understand caveats.
+ */
+#define ARRAY_LEN(ARR_) (sizeof(ARR_) / sizeof((ARR_)[0]))
+
+enum Result {
+	Result_Ok = 0,
+	Result_Done = -5,
+	Result_Fail = -1,
+};
+typedef enum Result Result;
+
+typedef void (*generic_fn)(void);
+typedef void (*generic_data_fn)(void*);
+typedef int (*int_generic_data_fn)(void*);
+
 /**
  * malloc wrapper that does error checking
  */
@@ -45,8 +72,10 @@ void* heap_resize(void*, long);
 
 /**
  * free pointer if not NULL and set to NULL
+ * NOTE: breaking code standard setting pointer to NULL
+ *       should be HEAP_FREE, but see no down side...
  */
-#define HEAP_FREE(ptr_)                    \
+#define heap_free(ptr_)                    \
 	{                                  \
 		if (ptr_ != NULL) {        \
 			free((void*)ptr_); \
@@ -147,11 +176,6 @@ void getnoext(char* dest, const char* filename);
  * NOTE: NULL terminator is assumed.
  */
 void string_to_lower(char* s);
-
-/**
- * copy BSD's strnstr
- */
-char* strnstr(const char* s, const char* find, size_t slen);
 
 #ifdef __cplusplus
 }

@@ -1,126 +1,85 @@
+/* ========================================
+ * project: RLC294 -- Topcon Medical Systems 2200/2300/2400 Chair Controller
+ * File:    Fifo.h
+ *
+ * First In First Out circular buffer
+ *
+ * Rick Kundrat & Zach Martin & Jason Kercher
+ * Initial version: 6/7/2022, JASON KERCHER
+ *
+ * Copyright RLC Electronic Systems, 2022
+ * All Rights Reserved
+ * CONFIDENTIAL AND PROPRIETARY INFORMATION
+ *
+ * ========================================
+*/
+
 #ifndef FIFO_H
 #define FIFO_H
 
 #include <stdint.h>
-#include <stdbool.h>
-#include <pthread.h>
-#include "vec.h"
 
-#if __STDC_VERSION__ < 201112L
-#define ATOMIC_
-#else
-#include <stdatomic.h>
-#define ATOMIC_ _Atomic
-#endif
 
-/**
- * naive thread-safe circular buffer
+/* Use anonymous struct or typedef
+ * NOTE: set LEN_ to a power of 2
  */
-
-#define Fifo(T_)                                  \
-	struct {                                  \
-		Vec(T_) buf;                      \
-		ATOMIC_(void*) shared_mutex_fifo; \
-		pthread_mutex_t head_mutex;       \
-		pthread_mutex_t tail_mutex;       \
-		pthread_cond_t cond_add;          \
-		pthread_cond_t cond_get;          \
-		unsigned input_count;             \
-		ATOMIC_ unsigned head;            \
-		ATOMIC_ unsigned tail;            \
-		ATOMIC_ unsigned _iter_head;      \
-		ATOMIC_ bool is_open;             \
+#define Fifo(T_, LEN_)              \
+	struct {                    \
+		uint16_t head;      \
+		uint16_t tail;      \
+		T_       buf[LEN_]; \
 	}
 
-typedef Fifo(uint8_t) Fifo;
+typedef Fifo(uint8_t, 64) Comms_Fifo;
 
-void* fifo_construct_(void*, unsigned buf_size, int elem_size);
-#define fifo_construct(f_, n_) fifo_construct_(f_, n_, sizeof(*(f_)->buf.data))
-void fifo_free(void*);
-void fifo_destroy(void*);
-void fifo_reset(void*);
+#define fifo_len(F_)                 (sizeof((F_).buf) / sizeof((F_).buf[0]))
+#define FIFO_IDX_ADD(F_, IDX_, OFF_) IDX_ = (IDX_ + (OFF_)) % fifo_len(F_)
 
-#define fifo_resize(f_, n_)                          \
-	{                                            \
-		if (n_ <= 1) {                       \
-			n_ = 2;                      \
-		}                                    \
-		(f_)->head = 0;                      \
-		(f_)->tail = 0;                      \
-		vec_resize_and_zero(&(f_)->buf, n_); \
-	}
-
-void fifo_set_open(void*, int);
-unsigned fifo_available(const void*);
-
-#define fifo_is_empty(f_)   ((f_)->head == (f_)->tail)
-#define fifo_is_full(f_)    (((f_)->head + 1) % (f_)->buf.size == (f_)->tail)
-#define fifo_receivable(f_) (f_)->buf.size - fifo_available(f_) - (f_)->input_count
-#define fifo_set_full(f_)                        \
-	{                                        \
-		(f_)->tail = 0;                  \
-		(f_)->head = (f_)->buf.size - 1; \
-	}
-
-#define fifo_peek(f_) &vec_at((f_)->buf, (f_)->tail)
-
-void* fifo_get_or_wait_(void*, int);
-#define fifo_get_or_wait(f_) fifo_get_or_wait_(f_, vec_elem_size((f_)->buf))
-
-void* fifo_get_(void*, int);
-#define fifo_get(f_) fifo_get_(f_, vec_elem_size((f_)->buf))
-
-int fifo_nget_(
-        void*, void* restrict buf, unsigned block_size, unsigned max, int elem_size);
-#define fifo_nget(f_, buf_, block_size_, max_) \
-	fifo_nget_(f_, buf_, block_size_, max_, vec_elem_size((f_)->buf)
-
-void* fifo_safe_peek_(void*, int elem_size);
-#define fifo_safe_peek(f_) fifo_safe_peek(f_, vec_elem_size((f_)->buf))
-
-void* fifo_look_ahead_(const void*, int elem_size);
-#define fifo_look_ahead(f_) fifo_look_ahead_(f_, vec_elem_size((f_)->buf))
-
-void fifo_consume(void*);
-
-void fifo_add_(void*, void* restrict, int iter_size);
-#define fifo_add(f_, item_)                                     \
-	{                                                       \
-		pthread_mutex_lock(&(f_)->head_mutex);          \
-		vec_set_one_at(&(f_)->buf, (f_)->head, item_);  \
-		(f_)->head = ((f_)->head + 1) % (f_)->buf.size; \
-		pthread_cond_signal(&(f_)->cond_add);           \
-		fifo_signal_shared(f_);                         \
-		pthread_mutex_unlock(&(f_)->head_mutex);        \
-	}
-
-//int fifo_add_try(void*, void* restrict);
-void fifo_nadd_(void*, Vec*, int elem_size);
-#define fifo_nadd(f_, buf_) fifo_nadd_(f_, (Vec*)(buf_), vec_elem_size((f_)->buf))
-//int fifo_nadd_try(void*, Vec* restrict);
-void fifo_advance(void*);
-
-
-/* these iterators do not touch mutexes
- * and do not send signals. Up to user
- * to call update() after done iterating.
+/* access: These "functions" operate directly on the struct 
+ *         because there is no modification.
  */
-void* fifo_begin_(void*, int elem_size);
-#define fifo_begin(f_) fifo_begin_(f_, vec_elem_size((f_)->buf))
+#define fifo_available(F_)                               \
+	({                                               \
+		unsigned avail_ = (F_).head - (F_).tail; \
+		if (avail_ > fifo_len(F_)) {             \
+			avail_ += fifo_len(F_);          \
+		}                                        \
+		avail_;                                  \
+	})
+#define fifo_is_empty(F_) ((F_).head == (F_).tail)
+#define fifo_is_full(F_)  (((F_).head + 1) % fifo_len(F_) == (F_).tail)
 
-void* fifo_iter_(void*, int elem_size);
-#define fifo_iter(f_) fifo_iter_(f_, vec_elem_size((f_)->buf))
+#define fifo_peek(F_)              ((F_).buf[(F_).tail])
+#define fifo_look_ahead(F_)        ((F_).buf[((F_).tail + 1) % fifo_len(F_)])
+#define fifo_idx_is_sane(F_, IDX_) ((F_).head - (F_).tail >= (IDX_) - (F_).tail)
 
-#define fifo_end(f_) vec_at((f_)->buf, (f_)->_iter_head)
+/* mutate: These "functions" take a pointer to the struct in order
+ *         to signal to the user there are mutations here.
+ */
+#define fifo_clear(F_) (F_)->head = (F_)->tail
 
-void fifo_update(void*);
-int fifo_update_try(void*);
+#define fifo_consume(F_, OFF_) FIFO_IDX_ADD(*(F_), (F_)->tail, OFF_)
+#define fifo_get(F_)                        \
+	({                                  \
+		unsigned old_ = (F_)->tail; \
+		fifo_consume(F_, 1);        \
+		(F_)->buf[old_];            \
+	})
 
-/* thread conditions */
-void fifo_wait_for_add(void*);
-void fifo_wait_for_get(void*);
-void fifo_wait_for_add_either(void*, void*);
-void fifo_wait_for_add_both(void*, void*);
-bool fifo_signal_shared(void*);
+#define fifo_advance(F_, OFF_) FIFO_IDX_ADD(*(F_), (F_)->head, OFF_)
+#define fifo_add(F_, ITEM_)                    \
+	{                                      \
+		if (fifo_is_full(*(F_))) {     \
+			fifo_consume(F_, 1);   \
+		}                              \
+		(F_)->buf[(F_)->head] = ITEM_; \
+		fifo_advance(F_, 1);           \
+	}
+#define fifo_add_array(F_, ARR_, LEN_)                     \
+	{                                                  \
+		for (int i_ = 0; i_ < (int)(LEN_); ++i_) { \
+			fifo_add(F_, (ARR_)[i_]);          \
+		}                                          \
+	}
 
 #endif /* FIFO_H */

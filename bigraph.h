@@ -4,7 +4,7 @@
 #include <stdbool.h>
 
 #include "vec.h"
-#include "fifo.h"
+#include "queue.h"
 
 struct Binode {
 	void* data;
@@ -17,12 +17,12 @@ typedef struct Binode Binode;
 struct Binode* Binode_construct(struct Binode* restrict, void* restrict);
 
 typedef Vec(struct Binode*) Binode_Vec;
-typedef Fifo(struct Binode*) Binode_Fifo;
+typedef Queue(struct Binode*) Binode_Queue;
 
 struct Bigraph {
 	Binode_Vec nodes;
 	struct Binode* newest;
-	Binode_Fifo _trav;
+	Binode_Queue _trav;
 	Binode_Vec _roots;
 	int _root_idx;
 	bool _roots_good;

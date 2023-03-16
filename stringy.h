@@ -53,7 +53,7 @@ void string_extend(String*, String);
 /* slice interface */
 void string_copy_from_slice(String* s, Const_Char_Slice);
 void string_append_slice(String*, Const_Char_Slice);
-Char_Slice string_get_slice(String);
+Const_Char_Slice string_get_slice(String);
 
 /* char interface */
 void string_push_back(String*, char);
@@ -70,6 +70,7 @@ char* string_export(String*);
 void string_clear(String*);
 void string_resize(String*, int);
 void string_copy(String* dest, String src);
+void string_terminate(String*);
 
 
 /* Find and replace */

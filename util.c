@@ -20,13 +20,12 @@ void* heap_alloc(long size) {
 /// Helper function to check for realloc errors
 void* heap_resize(void* data, long size) {
 	void* new_data = realloc(data, size);
-	if (!new_data) {
+	if (new_data == NULL) {
 		perror("realloc");
 		abort();
 	}
 	return new_data;
 }
-
 
 /////////////////////////////////////////////////
 /// safe strncpy that will always be 0 terminated
@@ -222,26 +221,6 @@ void string_to_lower(char* s)
 {
 	for ( ; *s; ++s)
 		*s = tolower(*s);
-}
-
-char* strnstr(const char* s, const char* find, size_t slen)
-{
-	char c, sc;
-	size_t len;
-
-	if ((c = *find++) != '\0') {
-		len = strlen(find);
-		do {
-			do {
-				if (slen-- < 1 || (sc = *s++) == '\0')
-					return (NULL);
-			} while (sc != c);
-			if (len > slen)
-				return (NULL);
-		} while (strncmp(s, find, len) != 0);
-		s--;
-	}
-	return ((char *)s);
 }
 
 #if 0
