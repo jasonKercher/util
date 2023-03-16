@@ -55,19 +55,16 @@ typedef int64_t  Bitset_Int;
 
 #define bitset_eq(BS0_, BS1_, BI_) (bitset_get(BS0_, BI_) == bitset_get(BS1_, BI_))
 
-#define bitset_write(BS_, BI_, V_) \
-    {                              \
-        if (V_)                    \
-        {                          \
-            bitset_set(BS_, BI_);  \
-        }                          \
-        else                       \
-        {                          \
-            bitset_clr(BS_, BI_);  \
-        }                          \
-    }
+#define bitset_write(BS_, BI_, V_)            \
+	{                                     \
+		if (V_) {                     \
+			bitset_set(BS_, BI_); \
+		} else {                      \
+			bitset_clr(BS_, BI_); \
+		}                             \
+	}
 
 Bitset_Uint bitset_get_uint(Bitset, unsigned index, unsigned width);
 Bitset_Int  bitset_get_int(Bitset, unsigned index, unsigned width);
 
-#endif  /* BITSET_H */
+#endif /* BITSET_H */

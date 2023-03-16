@@ -19,14 +19,14 @@ typedef unsigned  uint;
 
 typedef uint8_t* Type_Iterator;
 
-u8 type_iter_u8(Type_Iterator*);
+u8  type_iter_u8(Type_Iterator*);
 u16 type_iter_u16(Type_Iterator*);
 u32 type_iter_u32(Type_Iterator*);
 u64 type_iter_u64(Type_Iterator*);
 
-i8 type_iter_i8(Type_Iterator*);
+i8  type_iter_i8(Type_Iterator*);
 i16 type_iter_i16(Type_Iterator*);
 i32 type_iter_i32(Type_Iterator*);
 i64 type_iter_i64(Type_Iterator*);
 
-#endif  /* TYPE_H */
+#endif /* TYPE_H */

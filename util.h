@@ -83,11 +83,11 @@ void* heap_resize(void*, long);
 		}                          \
 	}
 
-/* Allow blank __VA_ARGS__ */
-#define optarg_(...) , ##__VA_ARGS__
-
 /* Allocate by type */
 #define new(T_) heap_alloc(sizeof(T_));
+
+/* Allow blank __VA_ARGS__ */
+#define OPTARG(...) , ##__VA_ARGS__
 
 #define NOT_IMPLEMENTED()                                                          \
 	{                                                                          \
@@ -103,7 +103,20 @@ void* heap_resize(void*, long);
 		}                           \
 	}
 
-#define num_compare_(a, b) (((a) > (b)) - ((a) < (b)))
+#define OR_GOTO(TEST_, LABEL_)             \
+	{                                  \
+		Result res_ = (TEST_);     \
+		if (res_ == Result_Fail) { \
+			goto LABEL_;       \
+		}                          \
+	}
+
+#define PARTIAL_SWITCH(VAR_)           \
+	_Pragma("GCC diagnostic push") \
+	    _Pragma("GCC diagnostic ignored \"-Wswitch\"") switch (VAR_)
+
+#define PARTIAL_SWITCH_END \
+	_Pragma("GCC diagnostic pop")
 
 char* strncpy_safe(char* dest, const char* src, size_t n);
 
